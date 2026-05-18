@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SF Release Tracker — Salesforce Deployment Chrome Extension</title>
+<meta name="description" content="Stop maintaining manual Salesforce deployment sheets. SF Release Tracker auto-fetches modified components, generates package.xml, and exports deployment checklists to Excel."/>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  --navy:    #080c18;
+  --navy2:   #0d1225;
+  --navy3:   #111827;
+  --border:  rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.13);
+  --text:    #e2e8f0;
+  --muted:   #8899b0;
+  --dim:     #3d5068;
+  --blue:    #60a5fa;
+  --blue2:   #3b82f6;
+  --blue3:   #2563eb;
+  --green:   #34d399;
+  --green2:  #10b981;
+  --purple:  #a78bfa;
+  --amber:   #fbbf24;
+  --red:     #f87171;
+  --cyan:    #67e8f9;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body { background: var(--navy); color: var(--text); font-family: 'Plus Jakarta Sans', sans-serif; overflow-x: hidden; }
+a { text-decoration: none; color: inherit; }
+
+/* NAV */
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+  height: 64px; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 48px; background: rgba(8,12,24,0.75);
+  backdrop-filter: blur(24px); border-bottom: 1px solid rgba(255,255,255,0.06);
+  transition: transform .3s ease;
+}
+.nav-brand { display: flex; align-items: center; gap: 11px; }
+.nav-icon { width: 36px; height: 36px; background: linear-gradient(135deg, #1d4ed8, #2563eb); border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 0 20px rgba(37,99,235,.35); }
+.nav-brand-text { font-size: 16px; font-weight: 800; letter-spacing: -.3px; }
+.nav-brand-text .sf { color: var(--blue); }
+.nav-links { display: flex; gap: 36px; list-style: none; }
+.nav-links a { font-size: 13.5px; font-weight: 500; color: var(--muted); transition: color .2s; }
+.nav-links a:hover { color: white; }
+.nav-right { display: flex; align-items: center; gap: 12px; }
+.nav-gh { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; color: var(--muted); border: 1px solid var(--border2); padding: 7px 16px; border-radius: 8px; transition: all .2s; }
+.nav-gh:hover { color: white; border-color: rgba(255,255,255,.25); background: rgba(255,255,255,.04); }
+.nav-install { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700; color: white; background: var(--blue3); padding: 8px 18px; border-radius: 8px; transition: all .2s; box-shadow: 0 0 20px rgba(37,99,235,.3); }
+.nav-install:hover { background: #1d4ed8; transform: translateY(-1px); box-shadow: 0 6px 24px rgba(37,99,235,.45); }
+
+/* HERO */
+.hero { position: relative; min-height: 100vh; display: flex; align-items: center; justify-content: center; text-align: center; overflow: hidden; padding: 120px 40px 80px; }
+.hero-canvas { position: absolute; inset: 0; }
+.hero-canvas::before { content: ''; position: absolute; inset: 0; background-image: linear-gradient(rgba(96,165,250,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(96,165,250,.05) 1px, transparent 1px); background-size: 56px 56px; animation: gridDrift 18s linear infinite; }
+@keyframes gridDrift { 0% { transform: translateY(0); } 100% { transform: translateY(56px); } }
+.glow-1 { position: absolute; width: 700px; height: 700px; top: -200px; left: 50%; transform: translateX(-50%); background: radial-gradient(circle, rgba(37,99,235,.22) 0%, transparent 65%); border-radius: 50%; }
+.glow-2 { position: absolute; width: 500px; height: 500px; bottom: -100px; right: -100px; background: radial-gradient(circle, rgba(16,185,129,.13) 0%, transparent 65%); border-radius: 50%; }
+.glow-3 { position: absolute; width: 400px; height: 400px; bottom: 0; left: -80px; background: radial-gradient(circle, rgba(139,92,246,.1) 0%, transparent 65%); border-radius: 50%; }
+.hero-inner { position: relative; z-index: 2; max-width: 860px; margin: 0 auto; }
+.hero-kicker { display: inline-flex; align-items: center; gap: 10px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); border-radius: 100px; padding: 7px 20px; font-size: 12.5px; font-weight: 700; color: var(--muted); letter-spacing: .8px; text-transform: uppercase; margin-bottom: 36px; }
+.live-pip { width: 8px; height: 8px; background: var(--green); border-radius: 50%; box-shadow: 0 0 10px rgba(52,211,153,.7); animation: pipPulse 2s ease-in-out infinite; }
+@keyframes pipPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .4; transform: scale(.75); } }
+.hero-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; color: var(--blue); margin-bottom: 16px; }
+.hero-headline { font-size: 82px; font-weight: 900; line-height: 1; letter-spacing: -3px; margin-bottom: 28px; }
+.hero-headline .word-sf { color: var(--blue); display: block; }
+.hero-headline .word-rel { color: white; }
+.hero-headline .word-trak { color: var(--green); }
+.hero-sub { font-size: 19px; color: var(--muted); line-height: 1.65; max-width: 640px; margin: 0 auto 48px; }
+.hero-sub strong { color: var(--text); font-weight: 600; }
+.hero-btns { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-bottom: 64px; }
+.btn-main { display: inline-flex; align-items: center; gap: 9px; background: var(--blue3); color: white; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 15px; font-weight: 700; padding: 15px 32px; border-radius: 10px; box-shadow: 0 0 0 1px rgba(37,99,235,.4), 0 12px 36px rgba(37,99,235,.3); transition: all .25s; }
+.btn-main:hover { transform: translateY(-2px); box-shadow: 0 0 0 1px rgba(37,99,235,.6), 0 20px 50px rgba(37,99,235,.45); }
+.btn-outline { display: inline-flex; align-items: center; gap: 9px; background: transparent; color: var(--text); font-family: 'Plus Jakarta Sans', sans-serif; font-size: 15px; font-weight: 600; padding: 15px 32px; border-radius: 10px; border: 1px solid var(--border2); transition: all .25s; }
+.btn-outline:hover { background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.22); transform: translateY(-1px); }
+.hero-stats { display: flex; justify-content: center; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: rgba(255,255,255,.025); backdrop-filter: blur(12px); max-width: 720px; margin: 0 auto; }
+.hstat { flex: 1; padding: 22px 16px; text-align: center; border-right: 1px solid var(--border); }
+.hstat:last-child { border-right: none; }
+.hstat-num { font-size: 28px; font-weight: 900; display: block; line-height: 1; margin-bottom: 6px; }
+.hstat-lbl { font-size: 11px; font-weight: 500; color: var(--dim); letter-spacing: .4px; text-transform: uppercase; }
+
+/* LAYOUT */
+.strip { background: linear-gradient(90deg, transparent, rgba(255,255,255,.05), transparent); height: 1px; width: 100%; }
+.section { padding: 100px 60px; max-width: 1140px; margin: 0 auto; }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 800; letter-spacing: 2.5px; text-transform: uppercase; color: var(--green); margin-bottom: 14px; }
+.tag::before { content: ''; width: 18px; height: 2px; background: var(--green); border-radius: 2px; display: block; }
+.section-h { font-size: 44px; font-weight: 900; line-height: 1.08; letter-spacing: -1.5px; margin-bottom: 16px; }
+.section-p { font-size: 17px; color: var(--muted); line-height: 1.7; max-width: 600px; margin-bottom: 56px; }
+.code-pill { display: inline-block; background: rgba(96,165,250,.12); color: var(--blue); border: 1px solid rgba(96,165,250,.22); border-radius: 5px; padding: 1px 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+
+/* WHY GRID */
+.why-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; background: var(--border); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+.why-card { background: var(--navy); padding: 40px 36px; transition: background .25s; }
+.why-card:hover { background: var(--navy2); }
+.why-icon { width: 52px; height: 52px; border-radius: 13px; display: flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 22px; }
+.why-card h3 { font-size: 17px; font-weight: 800; color: white; margin-bottom: 10px; letter-spacing: -.2px; }
+.why-card p { font-size: 14.5px; color: var(--muted); line-height: 1.65; }
+
+/* FEATURE ROWS */
+.features-alt { display: flex; flex-direction: column; gap: 80px; }
+.feat-row { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center; }
+.feat-row.rev { direction: rtl; }
+.feat-row.rev > * { direction: ltr; }
+.feat-text h3 { font-size: 34px; font-weight: 900; line-height: 1.1; letter-spacing: -1px; margin-bottom: 18px; color: white; }
+.feat-text p { font-size: 16px; color: var(--muted); line-height: 1.75; margin-bottom: 24px; }
+.feat-bullets { display: flex; flex-direction: column; gap: 10px; }
+.feat-bullet { display: flex; align-items: flex-start; gap: 11px; font-size: 14.5px; color: var(--text); }
+.bicon { width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; margin-top: 1px; }
+
+/* MOCK CARDS */
+.mock-card { background: var(--navy2); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; box-shadow: 0 32px 80px rgba(0,0,0,.55); }
+.mock-tb { background: rgba(255,255,255,.03); border-bottom: 1px solid var(--border); padding: 11px 16px; display: flex; align-items: center; gap: 8px; }
+.mac { display: flex; gap: 6px; }
+.mac span { width: 10px; height: 10px; border-radius: 50%; display: block; }
+.mock-tb-title { flex: 1; text-align: center; font-size: 11.5px; color: var(--dim); font-family: 'JetBrains Mono', monospace; }
+
+/* XML */
+.xml-body { padding: 20px; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; line-height: 1.8; background: #07090f; }
+.xt { color: #e879f9; } .xa { color: var(--blue); } .xv { color: var(--green); } .xc { color: var(--dim); } .xm { color: var(--amber); }
+.xml-foot { display: flex; gap: 8px; padding: 12px 16px; background: rgba(255,255,255,.02); border-top: 1px solid var(--border); }
+.xbtn { flex: 1; text-align: center; padding: 9px; border-radius: 8px; font-size: 11.5px; font-weight: 700; font-family: 'Plus Jakarta Sans', sans-serif; }
+.xbtn.pri { background: var(--blue3); color: white; }
+.xbtn.sec { background: rgba(255,255,255,.04); border: 1px solid var(--border2); color: var(--muted); }
+.xbtn.del { background: rgba(248,113,113,.1); border: 1px solid rgba(248,113,113,.3); color: var(--red); }
+
+/* Excel */
+.etabs { display: flex; background: rgba(255,255,255,.02); border-bottom: 1px solid var(--border); padding: 0 12px; overflow-x: auto; }
+.etab { padding: 10px 16px; font-size: 11px; font-weight: 600; color: var(--dim); border-bottom: 2px solid transparent; white-space: nowrap; }
+.etab.on { color: var(--green); border-bottom-color: var(--green); }
+.excel-body { padding: 14px; }
+.erow { display: grid; grid-template-columns: 2fr 1.2fr 1fr 1fr .7fr; gap: 6px; padding: 7px 8px; border-radius: 5px; font-size: 11.5px; }
+.erow.hd { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--dim); margin-bottom: 2px; }
+.erow:not(.hd) { color: var(--text); }
+.erow:not(.hd):nth-child(even) { background: rgba(255,255,255,.025); }
+.etag { display: inline-block; padding: 2px 9px; border-radius: 100px; font-size: 10px; font-weight: 700; }
+
+/* Steps */
+.steps-body { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.srow { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,.03); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
+.schk { width: 18px; height: 18px; border-radius: 5px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 900; }
+.schk.done { background: var(--green2); color: white; }
+.schk.pend { background: transparent; border: 1.5px solid var(--dim); }
+.stxt { flex: 1; font-size: 12px; }
+.stxt.done { color: var(--muted); text-decoration: line-through; }
+.spri { font-size: 10px; font-weight: 700; padding: 2px 9px; border-radius: 100px; }
+.spri.h { background: rgba(248,113,113,.12); color: var(--red); border: 1px solid rgba(248,113,113,.25); }
+.spri.m { background: rgba(251,191,36,.12); color: var(--amber); border: 1px solid rgba(251,191,36,.25); }
+.spri.l { background: rgba(52,211,153,.12); color: var(--green); border: 1px solid rgba(52,211,153,.25); }
+
+/* Fetch */
+.fchips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.fchip { padding: 4px 12px; border-radius: 100px; font-size: 10.5px; font-weight: 700; border: 1px solid; }
+.fgrp-hd { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; font-size: 9.5px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; border-top: 1px solid var(--border); margin-top: 4px; }
+.fgrp-ct { color: var(--dim); font-size: 10px; }
+.fitem { display: flex; align-items: center; gap: 9px; padding: 5px 4px; }
+.fitem-chk { width: 14px; height: 14px; border-radius: 4px; background: var(--blue3); display: flex; align-items: center; justify-content: center; color: white; font-size: 9px; font-weight: 900; }
+.fitem-name { font-size: 11px; flex: 1; }
+.fitem-by { font-size: 10px; color: var(--dim); }
+
+/* METADATA */
+.meta-bg { background: linear-gradient(180deg, var(--navy) 0%, var(--navy2) 50%, var(--navy) 100%); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.meta-inner { max-width: 1140px; margin: 0 auto; padding: 100px 60px; }
+.meta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.meta-group { background: rgba(255,255,255,.03); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; transition: border-color .25s; }
+.meta-group:hover { border-color: var(--border2); }
+.meta-ghead { padding: 14px 20px; display: flex; align-items: center; gap: 9px; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 800; color: white; background: rgba(255,255,255,.02); }
+.meta-gdot { width: 7px; height: 7px; border-radius: 50%; }
+.meta-chips { display: flex; flex-wrap: wrap; gap: 7px; padding: 16px 18px; }
+.mchip { padding: 4px 12px; border-radius: 100px; font-size: 11px; font-weight: 700; border: 1px solid; }
+.plus-any { margin-top: 28px; background: rgba(16,185,129,.05); border: 1px solid rgba(16,185,129,.18); border-radius: 12px; padding: 20px 24px; display: flex; gap: 16px; align-items: flex-start; }
+.plus-any-icon { font-size: 22px; flex-shrink: 0; margin-top: 1px; }
+.plus-any-title { font-size: 15px; font-weight: 800; color: white; margin-bottom: 6px; }
+.plus-any-desc { font-size: 13.5px; color: var(--muted); line-height: 1.6; }
+
+/* HOW IT WORKS */
+.hiw-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; position: relative; margin-top: 20px; }
+.hiw-line { position: absolute; top: 34px; left: calc(12.5% + 20px); right: calc(12.5% + 20px); height: 1px; background: linear-gradient(90deg, transparent, var(--border2) 20%, var(--border2) 80%, transparent); }
+.hiw-step { text-align: center; padding: 0 24px; position: relative; z-index: 2; }
+.hiw-num { width: 68px; height: 68px; margin: 0 auto 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 900; color: var(--blue); background: var(--navy2); border: 2px solid rgba(59,130,246,.35); box-shadow: 0 0 0 6px var(--navy), 0 0 30px rgba(37,99,235,.2); }
+.hiw-step h4 { font-size: 15px; font-weight: 800; color: white; margin-bottom: 10px; }
+.hiw-step p { font-size: 13.5px; color: var(--muted); line-height: 1.65; }
+
+/* SECURITY */
+.sec-bg { background: linear-gradient(135deg, #07090f 0%, #0b1020 100%); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.sec-inner { max-width: 1140px; margin: 0 auto; padding: 100px 60px; display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; }
+.sec-left h2 { font-size: 42px; font-weight: 900; letter-spacing: -1.5px; line-height: 1.1; margin-bottom: 20px; }
+.sec-left p { font-size: 16.5px; color: var(--muted); line-height: 1.75; margin-bottom: 20px; }
+.sec-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.sec-card { background: rgba(255,255,255,.03); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+.sec-icon { font-size: 24px; margin-bottom: 10px; display: block; }
+.sec-title { font-size: 13.5px; font-weight: 800; color: white; margin-bottom: 5px; }
+.sec-desc { font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+
+/* INSTALL */
+.install-wrap { max-width: 800px; margin: 0 auto; text-align: center; }
+.inst-card { background: var(--navy2); border: 1px solid var(--border); border-radius: 20px; overflow: hidden; text-align: left; margin-top: 48px; }
+.inst-card-hd { padding: 28px 36px; background: linear-gradient(135deg, rgba(37,99,235,.15), rgba(16,185,129,.08)); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; }
+.inst-card-icon { width: 56px; height: 56px; background: linear-gradient(135deg, #1d4ed8, #2563eb); border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 26px; box-shadow: 0 0 30px rgba(37,99,235,.4); }
+.inst-card-title { font-size: 22px; font-weight: 900; color: white; }
+.inst-card-sub { font-size: 14px; color: var(--muted); margin-top: 3px; }
+.inst-steps { padding: 32px 36px; display: flex; flex-direction: column; }
+.inst-step { display: flex; gap: 20px; padding: 20px 0; border-bottom: 1px solid var(--border); }
+.inst-step:last-child { border-bottom: none; }
+.inst-num { width: 38px; height: 38px; flex-shrink: 0; background: linear-gradient(135deg, var(--blue3), #1d4ed8); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 900; color: white; margin-top: 1px; }
+.inst-body h4 { font-size: 16px; font-weight: 800; color: white; margin-bottom: 7px; }
+.inst-body p { font-size: 14px; color: var(--muted); line-height: 1.65; }
+.inst-cta { padding: 0 36px 32px; }
+
+/* CHANGELOG */
+.cl-entry { background: var(--navy2); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; margin-bottom: 18px; }
+.cl-head { padding: 18px 26px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,.02); }
+.cl-version { font-size: 17px; font-weight: 900; color: white; }
+.cl-date { font-size: 12px; color: var(--dim); font-family: 'JetBrains Mono', monospace; }
+.cl-badge { margin-left: auto; font-size: 11px; font-weight: 700; padding: 4px 14px; border-radius: 100px; background: rgba(52,211,153,.12); color: var(--green); border: 1px solid rgba(52,211,153,.28); }
+.cl-body { padding: 22px 26px; }
+.cl-stitle { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: var(--dim); margin: 18px 0 10px; }
+.cl-stitle:first-child { margin-top: 0; }
+.cl-list { list-style: none; display: flex; flex-direction: column; gap: 7px; }
+.cl-list li { display: flex; gap: 11px; font-size: 14px; color: var(--muted); align-items: flex-start; line-height: 1.55; }
+.cl-list li::before { content: '→'; color: var(--blue3); font-weight: 700; flex-shrink: 0; }
+
+/* FAQ */
+.faq-list { display: flex; flex-direction: column; gap: 12px; max-width: 780px; }
+.faq-item { background: var(--navy2); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.faq-q { padding: 18px 24px; display: flex; align-items: center; justify-content: space-between; font-size: 15px; font-weight: 700; color: white; cursor: pointer; gap: 16px; }
+.faq-q:hover { background: rgba(255,255,255,.02); }
+.faq-icon { flex-shrink: 0; font-size: 20px; transition: transform .3s; color: var(--dim); line-height: 1; }
+.faq-a { padding: 0 24px 18px; font-size: 14.5px; color: var(--muted); line-height: 1.7; display: none; }
+.faq-item.open .faq-a { display: block; }
+.faq-item.open .faq-icon { transform: rotate(45deg); color: var(--blue); }
+
+/* SUPPORT BAND */
+.sup-band { background: linear-gradient(135deg, rgba(37,99,235,.18) 0%, rgba(16,185,129,.12) 100%); border-top: 1px solid rgba(37,99,235,.2); border-bottom: 1px solid rgba(37,99,235,.2); padding: 80px 60px; text-align: center; }
+.sup-band h2 { font-size: 42px; font-weight: 900; letter-spacing: -1.5px; margin-bottom: 14px; }
+.sup-band p { font-size: 17px; color: var(--muted); max-width: 520px; margin: 0 auto 36px; line-height: 1.65; }
+
+/* FOOTER */
+footer { background: #060810; border-top: 1px solid var(--border); padding: 60px 60px 40px; }
+.ft { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; gap: 48px; margin-bottom: 48px; }
+.ft-brand p { font-size: 14px; color: var(--muted); line-height: 1.7; margin-top: 14px; max-width: 280px; }
+.ft-col h5 { font-size: 11px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; color: var(--dim); margin-bottom: 16px; }
+.ft-col ul { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.ft-col a { font-size: 14px; color: var(--muted); transition: color .2s; }
+.ft-col a:hover { color: white; }
+.ft-div { border: none; border-top: 1px solid var(--border); margin-bottom: 28px; }
+.ft-bot { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--dim); }
+.ft-brand-row { display: flex; align-items: center; gap: 10px; }
+.ft-brand-row .fbi { width: 34px; height: 34px; background: linear-gradient(135deg, #1d4ed8, #2563eb); border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 17px; }
+.fbn { font-size: 16px; font-weight: 800; }
+.fbn .sf { color: var(--blue); }
+
+/* RESPONSIVE */
+@media (max-width: 1024px) {
+  .why-grid { grid-template-columns: repeat(2, 1fr); }
+  .feat-row { grid-template-columns: 1fr; gap: 40px; }
+  .feat-row.rev { direction: ltr; }
+  .hiw-grid { grid-template-columns: repeat(2, 1fr); }
+  .hiw-line { display: none; }
+  .sec-inner { grid-template-columns: 1fr; gap: 48px; }
+  .meta-grid { grid-template-columns: repeat(2, 1fr); }
+  .ft { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 768px) {
+  nav { padding: 0 20px; }
+  .nav-links { display: none; }
+  .hero { padding: 100px 24px 60px; }
+  .hero-headline { font-size: 52px; letter-spacing: -2px; }
+  .hero-sub { font-size: 16px; }
+  .section { padding: 70px 24px; }
+  .meta-inner { padding: 70px 24px; }
+  .sec-inner { padding: 70px 24px; }
+  .meta-grid { grid-template-columns: 1fr; }
+  .why-grid { grid-template-columns: 1fr; }
+  .hiw-grid { grid-template-columns: 1fr; }
+  .sec-cards { grid-template-columns: 1fr; }
+  .sup-band { padding: 60px 24px; }
+  .sup-band h2 { font-size: 32px; }
+  footer { padding: 48px 24px 32px; }
+  .ft { grid-template-columns: 1fr; gap: 32px; }
+  .ft-bot { flex-direction: column; gap: 12px; text-align: center; }
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav id="nav">
+  <a class="nav-brand" href="#">
+    <div class="nav-icon">🚀</div>
+    <div class="nav-brand-text"><span class="sf">SF</span> Release Tracker</div>
+  </a>
+  <ul class="nav-links">
+    <li><a href="#why">Why</a></li>
+    <li><a href="#features">Features</a></li>
+    <li><a href="#metadata-types">Metadata Types</a></li>
+    <li><a href="#how-it-works">How It Works</a></li>
+    <li><a href="#install">Install</a></li>
+    <li><a href="#changelog">Changelog</a></li>
+  </ul>
+  <div class="nav-right">
+    <a href="https://github.com/YOUR_USERNAME/sf-release-tracker" target="_blank" class="nav-gh">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.66-.22.66-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.56 9.56 0 0112 6.8c.85 0 1.7.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.16.58.67.48A10.01 10.01 0 0022 12c0-5.52-4.48-10-10-10z"/></svg>
+      GitHub
+    </a>
+    <a href="#install" class="nav-install">🔌 Install Free</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-canvas">
+    <div class="glow-1"></div><div class="glow-2"></div><div class="glow-3"></div>
+  </div>
+  <div class="hero-inner">
+    <div class="hero-kicker"><div class="live-pip"></div>Chrome Extension · Manifest V3 · Free</div>
+    <p class="hero-eyebrow">Salesforce · Deployment · Tool</p>
+    <h1 class="hero-headline">
+      <span class="word-sf">SF</span>
+      <span><span class="word-rel">Release</span> <span class="word-trak">Tracker</span></span>
+    </h1>
+    <p class="hero-sub">Stop maintaining <strong>manual deployment sheets.</strong> Auto-fetch modified components, generate <strong>package.xml</strong>, track pre &amp; post steps, and export your full checklist to Excel — in minutes.</p>
+    <div class="hero-btns">
+      <a href="#install" class="btn-main">🔌 Add to Chrome — Free</a>
+      <a href="#features" class="btn-outline">✦ Explore Features</a>
+    </div>
+    <div class="hero-stats">
+      <div class="hstat"><span class="hstat-num" style="color:var(--blue)">16+</span><span class="hstat-lbl">Auto-Fetched Types</span></div>
+      <div class="hstat"><span class="hstat-num" style="color:var(--green)">5</span><span class="hstat-lbl">Excel Sheets</span></div>
+      <div class="hstat"><span class="hstat-num" style="color:var(--purple)">∞</span><span class="hstat-lbl">Releases per Org</span></div>
+      <div class="hstat"><span class="hstat-num" style="color:var(--amber)">0</span><span class="hstat-lbl">External Servers</span></div>
+      <div class="hstat"><span class="hstat-num" style="color:var(--cyan)">1</span><span class="hstat-lbl">Click to Fetch</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="strip"></div>
+
+<!-- WHY CHOOSE -->
+<section class="section" id="why">
+  <div style="text-align:center;margin-bottom:60px">
+    <div class="tag" style="justify-content:center">Why SF Release Tracker</div>
+    <h2 class="section-h" style="text-align:center">Built for how Salesforce<br>developers actually work</h2>
+    <p class="section-p" style="text-align:center;margin:14px auto 0;max-width:560px">No setup. No backend. No data collection. Just open Salesforce, click, and your deployment package is ready.</p>
+  </div>
+  <div class="why-grid">
+    <div class="why-card">
+      <div class="why-icon" style="background:rgba(37,99,235,.14);border:1px solid rgba(37,99,235,.22)">⚡</div>
+      <h3>Zero Configuration</h3>
+      <p>Install the extension, open Salesforce, click Connect. No CLI setup, no OAuth apps, no API keys — it auto-detects your active browser session.</p>
+    </div>
+    <div class="why-card">
+      <div class="why-icon" style="background:rgba(139,92,246,.14);border:1px solid rgba(139,92,246,.22)">📦</div>
+      <h3>Full Deployment Lifecycle</h3>
+      <p>From fetching changed components to generating package.xml, tracking pre/post steps, and exporting a sign-off workbook — all in one sidebar.</p>
+    </div>
+    <div class="why-card">
+      <div class="why-icon" style="background:rgba(16,185,129,.14);border:1px solid rgba(16,185,129,.22)">🔒</div>
+      <h3>100% Private &amp; Offline</h3>
+      <p>All data lives in <span class="code-pill">chrome.storage.local</span>. Nothing ever leaves your device. XML generation, notes, and checklists work offline.</p>
+    </div>
+    <div class="why-card">
+      <div class="why-icon" style="background:rgba(251,191,36,.14);border:1px solid rgba(251,191,36,.22)">👥</div>
+      <h3>Team-Aware Filtering</h3>
+      <p>Defaults to showing only your changes. One click to see all team members' modifications — filter by type, date range, or search instantly.</p>
+    </div>
+    <div class="why-card">
+      <div class="why-icon" style="background:rgba(248,113,113,.14);border:1px solid rgba(248,113,113,.22)">🌙</div>
+      <h3>Dark &amp; Light Mode</h3>
+      <p>Full theme toggle — every element, chip, badge, and modal stays fully readable and polished in both dark and light modes.</p>
+    </div>
+    <div class="why-card">
+      <div class="why-icon" style="background:rgba(103,232,249,.14);border:1px solid rgba(103,232,249,.22)">🔖</div>
+      <h3>Live API Version</h3>
+      <p>Automatically fetches the latest Salesforce API version from your org — cached 24h so your package.xml is always current without manual edits.</p>
+    </div>
+  </div>
+</section>
+
+<div class="strip"></div>
+
+<!-- FEATURES -->
+<section class="section" id="features">
+  <div class="tag">Features</div>
+  <h2 class="section-h">Every feature you need<br>to <span style="color:var(--blue)">ship with confidence</span></h2>
+  <p class="section-p">SF Release Tracker handles the full deployment lifecycle — fetching changes, generating XML, tracking steps, and exporting to Excel.</p>
+
+  <div class="features-alt">
+
+    <!-- F1: Fetch -->
+    <div class="feat-row">
+      <div class="feat-text">
+        <div class="tag">Auto-Fetch</div>
+        <h3>Pull your changes<br>in one click</h3>
+        <p>Click Fetch Changes and SF Release Tracker queries your org via Tooling API and REST API in parallel, pulling all recently modified components.</p>
+        <div class="feat-bullets">
+          <div class="feat-bullet"><div class="bicon" style="background:rgba(52,211,153,.14);border:1px solid rgba(52,211,153,.2);color:var(--green)">✓</div><span>Mine filter active by default — only your components on load</span></div>
+          <div class="feat-bullet"><div class="bicon" style="background:rgba(52,211,153,.14);border:1px solid rgba(52,211,153,.2);color:var(--green)">✓</div><span>Today, Last Week, or Last 30 Days — SOQL date range filters</span></div>
+          <div class="feat-bullet"><div class="bicon" style="background:rgba(52,211,153,.14);border:1px solid rgba(52,211,153,.2);color:var(--green)">✓</div><span>Type chip filters, full-text search, and bulk ✓ All / ✕ None selection</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="mock-card">
+          <div class="mock-tb">
+            <div class="mac"><span style="background:#ff5f56"></span><span style="background:#ffbd2e"></span><span style="background:#27c93f"></span></div>
+            <div class="mock-tb-title">Components · 8 found</div>
+          </div>
+          <div style="padding:14px">
+            <div class="fchips">
+              <span class="fchip" style="background:#1e3a8a;border-color:var(--blue2);color:#93c5fd">All</span>
+              <span class="fchip" style="background:rgba(125,211,252,.1);border-color:rgba(125,211,252,.3);color:#7dd3fc">Apex Class</span>
+              <span class="fchip" style="background:rgba(52,211,153,.1);border-color:rgba(52,211,153,.3);color:#34d399">LWC</span>
+              <span class="fchip" style="background:rgba(167,139,250,.1);border-color:rgba(167,139,250,.3);color:#a78bfa">Flow</span>
+              <span style="margin-left:auto;font-size:10px;color:var(--dim)">👥 All</span>
+            </div>
+            <div style="display:flex;gap:6px;margin-bottom:10px">
+              <div style="background:#1e3a8a;border:1px solid var(--blue2);border-radius:6px;padding:5px 10px;font-size:10px;font-weight:700;color:#93c5fd">✓ All</div>
+              <div style="background:rgba(255,255,255,.04);border:1px solid var(--border2);border-radius:6px;padding:5px 10px;font-size:10px;font-weight:700;color:var(--dim)">✕ None</div>
+              <div style="background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);border-radius:6px;padding:5px 10px;font-size:10px;font-weight:700;color:var(--red)">Clear Changes</div>
+              <div style="margin-left:auto;background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.3);border-radius:6px;padding:5px 10px;font-size:10px;font-weight:700;color:var(--green)">+ Add manually</div>
+            </div>
+            <div class="fgrp-hd"><span style="color:#7dd3fc">● Apex Class</span><span class="fgrp-ct">4/4</span></div>
+            <div class="fitem"><div class="fitem-chk">✓</div><div class="fitem-name">AccountTriggerHandler</div><div class="fitem-by">Rahul J · Today</div></div>
+            <div class="fitem"><div class="fitem-chk">✓</div><div class="fitem-name">OpportunityService</div><div class="fitem-by">Rahul J · Today</div></div>
+            <div class="fitem"><div class="fitem-chk">✓</div><div class="fitem-name">LeadConversionBatch</div><div class="fitem-by">Rahul J · Today</div></div>
+            <div class="fgrp-hd" style="margin-top:6px"><span style="color:#34d399">● LWC</span><span class="fgrp-ct">3/3</span></div>
+            <div class="fitem"><div class="fitem-chk">✓</div><div class="fitem-name">accountDashboard</div><div class="fitem-by">Rahul J · Today</div></div>
+            <div class="fitem"><div class="fitem-chk">✓</div><div class="fitem-name">opportunityKanban</div><div class="fitem-by">Rahul J · Today</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- F2: package.xml -->
+    <div class="feat-row rev">
+      <div class="feat-text">
+        <div class="tag" style="color:var(--purple);--green:var(--purple)"><span style="background:var(--purple)"></span>XML Generator</div>
+        <h3>package.xml — ready<br>in <span style="color:var(--purple)">one click</span></h3>
+        <p>Preview your deployment manifest right in the sidebar, copy it to clipboard, or download it. Always uses the live API version from your connected org.</p>
+        <div class="feat-bullets">
+          <div class="feat-bullet"><div class="bicon" style="background:rgba(167,139,250,.14);border:1px solid rgba(167,139,250,.2);color:var(--purple)">✓</div><span>Types and members sorted alphabetically for clean git diffs</span></div>
+          <div class="feat-bullet"><div class="bicon" style="background:rgba(167,139,250,.14);border:1px solid rgba(167,139,250,.2);color:var(--purple)">✓</div><span>XML-escaped member names — no malformed manifests from special characters</span></div>
+          <div class="feat-bullet"><div class="bicon" style="background:rgba(248,113,113,.14);border:1px solid rgba(248,113,113,.2);color:var(--red)">💣</div><span>Mark for deletion — generates a separate destructiveChanges.xml in one step</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="mock-card">
+          <div class="mock-tb">
+            <div class="mac"><span style="background:#ff5f56"></span><span style="background:#ffbd2e"></span><span style="background:#27c93f"></span></div>
+            <div class="mock-tb-title">package.xml · v63.0</div>
+            <span style="font-size:10px;color:var(--green);font-family:'JetBrains Mono',monospace">● LIVE</span>
+          </div>
+          <div class="xml-body">
+<span class="xc">&lt;?xml version="1.0" encoding="UTF-8"?&gt;</span><br>
+<span class="xt">&lt;Package</span> <span class="xa">xmlns</span>=<span class="xv">"http://soap.sforce.com/..."</span><span class="xt">&gt;</span><br><br>
+&nbsp;&nbsp;<span class="xt">&lt;types&gt;</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="xt">&lt;members&gt;</span><span class="xm">AccountTriggerHandler</span><span class="xt">&lt;/members&gt;</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="xt">&lt;members&gt;</span><span class="xm">LeadConversionBatch</span><span class="xt">&lt;/members&gt;</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="xt">&lt;members&gt;</span><span class="xm">OpportunityService</span><span class="xt">&lt;/members&gt;</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="xt">&lt;name&gt;</span><span class="xv">ApexClass</span><span class="xt">&lt;/name&gt;</span><br>
+&nbsp;&nbsp;<span class="xt">&lt;/types&gt;</span><br><br>
+&nbsp;&nbsp;<span class="xt">&lt;types&gt;</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="xt">&lt;members&gt;</span><span class="xm">accountDashboard</span><span class="xt">&lt;/members&gt;</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="xt">&lt;name&gt;</span><span class="xv">LightningComponentBundle</span><span class="xt">&lt;/name&gt;</span><br>
+&nbsp;&nbsp;<span class="xt">&lt;/types&gt;</span><br><br>
+&nbsp;&nbsp;<span class="xt">&lt;version&gt;</span><span class="xv">63.0</span><span class="xt">&lt;/version&gt;</span><br>
+<span class="xt">&lt;/Package&gt;</span>
+          </div>
+          <div class="xml-foot">
+            <div class="xbtn pri">⬇ Download</div>
+            <div class="xbtn sec">📋 Copy</div>
+            <div class="xbtn del">💣 Destructive</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- F3: Excel -->
+    <div class="feat-row">
+      <div class="feat-text">
+        <div class="tag">Excel Export</div>
+        <h3>Complete deployment<br><span style="color:var(--green)">workbook in seconds</span></h3>
+        <p>Download a professional 5-sheet Excel workbook covering every aspect of your deployment. Perfect for team sign-off and post-deployment records.</p>
+        <div class="feat-bullets">
+          <div class="feat-bullet"><div class="bicon" style="background:rgba(52,211,153,.14);border:1px solid rgba(52,211,153,.2);color:var(--green)">✓</div><span>Components — all selected items with type, modifier, date, destructive flag</span></div>
+          <div class="feat-bullet"><div class="bicon" style="background:rgba(52,211,153,.14);border:1px solid rgba(52,211,153,.2);color:var(--green)">✓</div><span>Pre &amp; Post Steps with priority level and done status</span></div>
+          <div class="feat-bullet"><div class="bicon" style="background:rgba(52,211,153,.14);border:1px solid rgba(52,211,153,.2);color:var(--green)">✓</div><span>Notes + Summary — release metadata, counts, timestamps, export date</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="mock-card">
+          <div class="mock-tb">
+            <div class="mac"><span style="background:#ff5f56"></span><span style="background:#ffbd2e"></span><span style="background:#27c93f"></span></div>
+            <div class="mock-tb-title">Release-2026-05-16.xlsx</div>
+          </div>
+          <div class="etabs">
+            <div class="etab on">📦 Components</div>
+            <div class="etab">▶ Pre Steps</div>
+            <div class="etab">◀ Post Steps</div>
+            <div class="etab">📝 Notes</div>
+            <div class="etab">📊 Summary</div>
+          </div>
+          <div class="excel-body">
+            <div class="erow hd"><span>Component</span><span>Type</span><span>Modified By</span><span>Date</span><span>Destr.</span></div>
+            <div class="erow"><span>AccountTriggerHandler</span><span><span class="etag" style="background:rgba(125,211,252,.12);color:#7dd3fc">Apex Class</span></span><span>Rahul J.</span><span>16 May 26</span><span style="color:var(--green)">No</span></div>
+            <div class="erow"><span>OpportunityService</span><span><span class="etag" style="background:rgba(125,211,252,.12);color:#7dd3fc">Apex Class</span></span><span>Rahul J.</span><span>16 May 26</span><span style="color:var(--green)">No</span></div>
+            <div class="erow"><span>accountDashboard</span><span><span class="etag" style="background:rgba(52,211,153,.12);color:#34d399">LWC</span></span><span>Rahul J.</span><span>16 May 26</span><span style="color:var(--green)">No</span></div>
+            <div class="erow"><span>Lead_Assignment_Flow</span><span><span class="etag" style="background:rgba(167,139,250,.12);color:#a78bfa">Flow</span></span><span>Rahul J.</span><span>16 May 26</span><span style="color:var(--green)">No</span></div>
+            <div class="erow"><span>ContactPage</span><span><span class="etag" style="background:rgba(96,165,250,.12);color:#60a5fa">VF Page</span></span><span>Rahul J.</span><span>16 May 26</span><span style="color:var(--red)">Yes</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- F4: Steps -->
+    <div class="feat-row rev">
+      <div class="feat-text">
+        <div class="tag" style="color:var(--amber)">Deployment Steps</div>
+        <h3>Never miss a step<br><span style="color:var(--amber)">before or after</span></h3>
+        <p>A structured checklist of Pre and Post deployment tasks per release. Set priority levels so the team knows what's critical, and mark steps done in real time.</p>
+        <div class="feat-bullets">
+          <div class="feat-bullet"><div class="bicon" style="background:rgba(251,191,36,.14);border:1px solid rgba(251,191,36,.2);color:var(--amber)">✓</div><span>High, Medium, Low, and None priority levels per step</span></div>
+          <div class="feat-bullet"><div class="bicon" style="background:rgba(251,191,36,.14);border:1px solid rgba(251,191,36,.2);color:var(--amber)">✓</div><span>Done state persists in chrome.storage.local — survives browser restarts</span></div>
+          <div class="feat-bullet"><div class="bicon" style="background:rgba(251,191,36,.14);border:1px solid rgba(251,191,36,.2);color:var(--amber)">✓</div><span>Exported to your Excel workbook with completion status included</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="mock-card">
+          <div class="mock-tb">
+            <div class="mac"><span style="background:#ff5f56"></span><span style="background:#ffbd2e"></span><span style="background:#27c93f"></span></div>
+            <div class="mock-tb-title">Pre-Deployment Steps · 2/4 done</div>
+          </div>
+          <div class="steps-body">
+            <div class="srow"><div class="schk done">✓</div><div class="stxt done">Backup production data before deployment</div><div class="spri h">High</div></div>
+            <div class="srow"><div class="schk done">✓</div><div class="stxt done">Disable scheduled jobs in target org</div><div class="spri m">Medium</div></div>
+            <div class="srow"><div class="schk pend"></div><div class="stxt">Run all Apex test classes in sandbox</div><div class="spri h">High</div></div>
+            <div class="srow"><div class="schk pend"></div><div class="stxt">Notify team of deployment window</div><div class="spri l">Low</div></div>
+            <div style="border-top:1px solid var(--border);padding-top:10px;margin-top:4px">
+              <div style="font-size:9.5px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:var(--dim);margin-bottom:8px">Post-Deployment · 0/2 done</div>
+              <div class="srow"><div class="schk pend"></div><div class="stxt">Validate flows are active in production</div><div class="spri h">High</div></div>
+              <div class="srow"><div class="schk pend"></div><div class="stxt">Re-enable scheduled jobs</div><div class="spri m">Medium</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<div class="strip"></div>
+
+<!-- METADATA TYPES -->
+<div class="meta-bg" id="metadata-types">
+  <div class="meta-inner">
+    <div class="tag">Coverage</div>
+    <h2 class="section-h">16 types. Auto-fetched.<br><span style="color:var(--blue)">Always.</span></h2>
+    <p class="section-p">These types are fetched automatically on every Fetch Changes click. Anything else can be added manually via the Add manually button.</p>
+    <div class="meta-grid">
+      <div class="meta-group"><div class="meta-ghead"><div class="meta-gdot" style="background:#7dd3fc"></div>Apex</div><div class="meta-chips"><span class="mchip" style="background:rgba(125,211,252,.1);border-color:rgba(125,211,252,.3);color:#7dd3fc">Apex Class</span><span class="mchip" style="background:rgba(251,146,60,.1);border-color:rgba(251,146,60,.3);color:#fb923c">Apex Trigger</span><span class="mchip" style="background:rgba(96,165,250,.1);border-color:rgba(96,165,250,.3);color:#60a5fa">Visualforce Page</span><span class="mchip" style="background:rgba(129,140,248,.1);border-color:rgba(129,140,248,.3);color:#818cf8">Visualforce Component</span></div></div>
+      <div class="meta-group"><div class="meta-ghead"><div class="meta-gdot" style="background:#34d399"></div>LWC &amp; Aura</div><div class="meta-chips"><span class="mchip" style="background:rgba(52,211,153,.1);border-color:rgba(52,211,153,.3);color:#34d399">Lightning Web Component</span><span class="mchip" style="background:rgba(110,231,183,.1);border-color:rgba(110,231,183,.3);color:#6ee7b7">Aura Component</span></div></div>
+      <div class="meta-group"><div class="meta-ghead"><div class="meta-gdot" style="background:#a78bfa"></div>Flows &amp; Process</div><div class="meta-chips"><span class="mchip" style="background:rgba(167,139,250,.1);border-color:rgba(167,139,250,.3);color:#a78bfa">Flow</span></div></div>
+      <div class="meta-group"><div class="meta-ghead"><div class="meta-gdot" style="background:#a3e635"></div>Objects &amp; Fields</div><div class="meta-chips"><span class="mchip" style="background:rgba(163,230,53,.1);border-color:rgba(163,230,53,.3);color:#a3e635">Custom Object</span><span class="mchip" style="background:rgba(190,242,100,.1);border-color:rgba(190,242,100,.3);color:#bef264">Custom Field</span></div></div>
+      <div class="meta-group"><div class="meta-ghead"><div class="meta-gdot" style="background:#fbbf24"></div>Security</div><div class="meta-chips"><span class="mchip" style="background:rgba(251,191,36,.1);border-color:rgba(251,191,36,.3);color:#fbbf24">Permission Set</span><span class="mchip" style="background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.3);color:#f59e0b">Perm Set Group</span><span class="mchip" style="background:rgba(253,230,138,.1);border-color:rgba(253,230,138,.3);color:#fde68a">Profile</span></div></div>
+      <div class="meta-group"><div class="meta-ghead"><div class="meta-gdot" style="background:#f87171"></div>Rules &amp; Resources</div><div class="meta-chips"><span class="mchip" style="background:rgba(248,113,113,.1);border-color:rgba(248,113,113,.3);color:#f87171">Validation Rule</span><span class="mchip" style="background:rgba(103,232,249,.1);border-color:rgba(103,232,249,.3);color:#67e8f9">Email Template</span><span class="mchip" style="background:rgba(148,163,184,.1);border-color:rgba(148,163,184,.3);color:#94a3b8">Static Resource</span><span class="mchip" style="background:rgba(196,181,253,.1);border-color:rgba(196,181,253,.3);color:#c4b5fd">Custom Label</span></div></div>
+    </div>
+    <div class="plus-any">
+      <div class="plus-any-icon">➕</div>
+      <div>
+        <div class="plus-any-title">Any Other Type — via Manual Add</div>
+        <div class="plus-any-desc">Layout, FlexiPage, CustomMetadata, Report, Dashboard, ConnectedApp, NamedCredential, RemoteSiteSetting, WorkflowRule, SharingRules, Role, MutingPermissionSet, Territory, Queue, Group — or any valid Salesforce metadata type.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- HOW IT WORKS -->
+<section class="section" id="how-it-works">
+  <div style="text-align:center;margin-bottom:64px">
+    <div class="tag" style="justify-content:center">Workflow</div>
+    <h2 class="section-h" style="text-align:center">From org to deployment<br>in four steps</h2>
+    <p class="section-p" style="text-align:center;margin:14px auto 0;max-width:520px">SF Release Tracker fits naturally into your existing Salesforce workflow — zero configuration required.</p>
+  </div>
+  <div class="hiw-grid">
+    <div class="hiw-line"></div>
+    <div class="hiw-step"><div class="hiw-num">1</div><h4>Open Salesforce</h4><p>Navigate to any Salesforce org in Chrome — Lightning, Classic, Visualforce, or Setup all work.</p></div>
+    <div class="hiw-step"><div class="hiw-num">2</div><h4>Connect &amp; Create Release</h4><p>Click the extension icon. Your session is auto-detected. Create a named release like "Sprint-Q2-2026".</p></div>
+    <div class="hiw-step"><div class="hiw-num">3</div><h4>Fetch &amp; Select</h4><p>Click Fetch Changes. Review, filter, and select the components going into this deployment.</p></div>
+    <div class="hiw-step"><div class="hiw-num">4</div><h4>Generate &amp; Export</h4><p>Generate package.xml, add pre/post steps, write deployment notes, and export your full workbook.</p></div>
+  </div>
+</section>
+
+<div class="strip"></div>
+
+<!-- SECURITY -->
+<div class="sec-bg" id="security">
+  <div class="sec-inner">
+    <div class="sec-left">
+      <div class="tag">Privacy &amp; Security</div>
+      <h2>Privacy<br>by <span style="color:var(--green)">design.</span></h2>
+      <p>SF Release Tracker was built with a zero-data-collection policy from day one. Your Salesforce credentials, components, and deployment data never leave your device.</p>
+      <p style="font-size:14px;color:var(--dim)">The extension connects directly to your Salesforce org using your existing browser session cookie — the same way you're already logged in. No additional OAuth app or credentials required.</p>
+    </div>
+    <div class="sec-cards">
+      <div class="sec-card"><span class="sec-icon">💾</span><div class="sec-title">Local Data Only</div><div class="sec-desc">All data in <span class="code-pill" style="font-size:11px">chrome.storage.local</span>. Nothing sent to external servers.</div></div>
+      <div class="sec-card"><span class="sec-icon">🚫</span><div class="sec-title">No Third-Party Sharing</div><div class="sec-desc">Zero data shared with analytics, advertising, or any third-party service.</div></div>
+      <div class="sec-card"><span class="sec-icon">📋</span><div class="sec-title">No Data Collection</div><div class="sec-desc">No telemetry, no crash reports, no usage tracking of any kind.</div></div>
+      <div class="sec-card"><span class="sec-icon">🛡️</span><div class="sec-title">Minimal Permissions</div><div class="sec-desc">Only cookies (SID read), scripting, and sidePanel — the bare minimum.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- INSTALL -->
+<section class="section" id="install">
+  <div class="install-wrap">
+    <div class="tag" style="justify-content:center">Installation</div>
+    <h2 class="section-h" style="text-align:center">Up and running<br>in under 2 minutes</h2>
+    <p class="section-p" style="text-align:center;margin:14px auto 0">Install directly from the Chrome Web Store. No configuration, no CLI, no setup required.</p>
+    <div class="inst-card">
+      <div class="inst-card-hd">
+        <div class="inst-card-icon">🔌</div>
+        <div>
+          <div class="inst-card-title">Install from Chrome Web Store</div>
+          <div class="inst-card-sub">Free · Manifest V3 · Works on all Salesforce domains</div>
+        </div>
+      </div>
+      <div class="inst-steps">
+        <div class="inst-step"><div class="inst-num">1</div><div class="inst-body"><h4>Visit the Chrome Web Store</h4><p>Search for <strong style="color:white">SF Release Tracker</strong> or click the Install button below to go directly to the listing.</p></div></div>
+        <div class="inst-step"><div class="inst-num">2</div><div class="inst-body"><h4>Click "Add to Chrome"</h4><p>Accept the permissions prompt. The extension needs access to Salesforce domains and your session cookie to detect your org automatically.</p></div></div>
+        <div class="inst-step"><div class="inst-num">3</div><div class="inst-body"><h4>Open Salesforce &amp; click the icon</h4><p>Navigate to your org (e.g. <span class="code-pill">yourorg.lightning.force.com</span>), click the SF Release Tracker toolbar icon, and the sidebar opens. For first-time use, refresh the Salesforce page once before clicking Connect.</p></div></div>
+        <div class="inst-step"><div class="inst-num">4</div><div class="inst-body"><h4>Create a release and start fetching</h4><p>Click <strong style="color:white">+ New Release</strong>, give it a name, then click <strong style="color:white">Fetch Changes</strong>. Your modified components load instantly — filtered to your changes by default.</p></div></div>
+      </div>
+      <div class="inst-cta">
+        <a href="#" class="btn-main" style="width:100%;justify-content:center;font-size:16px;padding:17px">🔌 Install SF Release Tracker — Free</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="strip"></div>
+
+<!-- CHANGELOG -->
+<section class="section" id="changelog">
+  <div class="tag">Changelog</div>
+  <h2 class="section-h">What's new</h2>
+  <p class="section-p">All notable changes to SF Release Tracker, newest first.</p>
+  <div class="cl-entry">
+    <div class="cl-head">
+      <div class="cl-version">v1.0.0 Beta</div>
+      <div class="cl-date">2025-05-16</div>
+      <div class="cl-badge">✨ Initial Release</div>
+    </div>
+    <div class="cl-body">
+      <div class="cl-stitle">✨ New Features</div>
+      <ul class="cl-list">
+        <li>Auto-fetch Changes detects modified Salesforce components via Tooling API &amp; REST API in parallel</li>
+        <li>16 auto-fetched metadata types: ApexClass, ApexTrigger, ApexPage, ApexComponent, LightningComponentResource, AuraDefinition, Flow, CustomObject, CustomField, PermissionSet, PermissionSetGroup, Profile, ValidationRule, EmailTemplate, StaticResource, CustomLabel</li>
+        <li>Manual Component Add — any metadata type not in the auto-fetch list</li>
+        <li>Multiple Releases — independent deployment releases per org, each with its own components and steps</li>
+        <li>package.xml Generator — one-click XML with in-app preview, copy, and download</li>
+        <li>destructiveChanges.xml — mark components for deletion with a separate manifest</li>
+        <li>Excel Export — 5-sheet workbook: Components, Pre Steps, Post Steps, Notes, Summary</li>
+        <li>Pre/Post Deployment Steps — checklist with priority levels (High / Medium / Low)</li>
+        <li>Deployment Notes — per-release free-text notes with auto-save</li>
+        <li>Dark / Light Mode — full theme toggle with proper contrast in both modes</li>
+        <li>Offline Storage — all data in chrome.storage.local, no backend required</li>
+      </ul>
+      <div class="cl-stitle">🎨 UI Highlights</div>
+      <ul class="cl-list">
+        <li>Plus Jakarta Sans for all UI text; JetBrains Mono for code, IDs, and API versions</li>
+        <li>Deep navy-black dark theme (#0a0e1a) with vivid accent colours and gradient header</li>
+        <li>Mine filter active by default — only your components shown on every session start</li>
+        <li>Colour-coded toast notifications (green / red / blue) with smooth hover animations</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<div class="strip"></div>
+
+<!-- FAQ -->
+<section class="section" id="faq">
+  <div class="tag">FAQ</div>
+  <h2 class="section-h">Common questions</h2>
+  <p class="section-p">Quick answers to the most common questions about SF Release Tracker.</p>
+  <div class="faq-list">
+    <div class="faq-item open">
+      <div class="faq-q" onclick="this.parentElement.classList.toggle('open')"><span>Does SF Release Tracker work on sandboxes and scratch orgs?</span><span class="faq-icon">+</span></div>
+      <div class="faq-a">Yes. SF Release Tracker works on any Salesforce org accessible via a supported domain — including sandboxes (<span class="code-pill">*.sandbox.my.salesforce.com</span>), scratch orgs, developer editions, and production. It auto-detects the org from your active browser tab.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="this.parentElement.classList.toggle('open')"><span>Is my session token ever sent anywhere?</span><span class="faq-icon">+</span></div>
+      <div class="faq-a">Never. Your session token (SID) is read from your browser's cookie store and used only to call Salesforce's own APIs directly from your browser. It is never transmitted to any external server, logged, or stored outside <span class="code-pill">chrome.storage.local</span>.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="this.parentElement.classList.toggle('open')"><span>Can I use SF Release Tracker without an internet connection?</span><span class="faq-icon">+</span></div>
+      <div class="faq-a">Partially. package.xml generation, destructiveChanges.xml, checklist management, deployment notes, and Excel export all work fully offline. Only Fetch Changes requires an active Salesforce session to call the Tooling API and REST API.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="this.parentElement.classList.toggle('open')"><span>What happens to my releases when I switch orgs?</span><span class="faq-icon">+</span></div>
+      <div class="faq-a">Releases are bound to their org by Org ID. When you switch orgs, SF Release Tracker automatically surfaces the most recently updated release for that org. All your previous releases are preserved and return when you switch back.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="this.parentElement.classList.toggle('open')"><span>Can I add metadata types not in the auto-fetch list?</span><span class="faq-icon">+</span></div>
+      <div class="faq-a">Yes. Click <strong style="color:white">+ Add manually</strong> in the Components tab to add any Salesforce metadata type — Layout, FlexiPage, CustomMetadata, Report, Dashboard, ConnectedApp, and many more. They're included in your package.xml just like auto-fetched components.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="this.parentElement.classList.toggle('open')"><span>The extension isn't connecting — what should I do?</span><span class="faq-icon">+</span></div>
+      <div class="faq-a">Make sure you have an active Salesforce tab open and are logged in. On first install, refresh your Salesforce tab once before clicking Connect. If it still doesn't work, try clearing your browser cache or reloading the extension at <span class="code-pill">chrome://extensions</span>.</div>
+    </div>
+  </div>
+</section>
+
+<!-- SUPPORT -->
+<div class="sup-band">
+  <div class="tag" style="justify-content:center;color:var(--blue)">Open Source &amp; Community</div>
+  <h2>Love SF Release Tracker?<br><span style="color:var(--green)">Support the project.</span></h2>
+  <p>SF Release Tracker is free for every Salesforce developer. If it saves you time, a star on GitHub or a review on the Chrome Web Store goes a long way.</p>
+  <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap">
+    <a href="https://github.com/YOUR_USERNAME/sf-release-tracker" target="_blank" class="btn-main">⭐ Star on GitHub</a>
+    <a href="https://github.com/YOUR_USERNAME/sf-release-tracker/issues/new?labels=enhancement" target="_blank" class="btn-outline">💡 Request a Feature</a>
+    <a href="https://github.com/YOUR_USERNAME/sf-release-tracker/issues/new?labels=bug" target="_blank" class="btn-outline">🐛 Report a Bug</a>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="ft">
+    <div class="ft-brand">
+      <div class="ft-brand-row"><div class="fbi">🚀</div><div class="fbn"><span class="sf">SF</span> Release Tracker</div></div>
+      <p>A lightweight, privacy-first Chrome Extension for Salesforce developers. No backend. No tracking. Just shipping.</p>
+    </div>
+    <div class="ft-col"><h5>Product</h5><ul><li><a href="#features">Features</a></li><li><a href="#metadata-types">Metadata Types</a></li><li><a href="#how-it-works">How It Works</a></li><li><a href="#install">Install</a></li></ul></div>
+    <div class="ft-col"><h5>Resources</h5><ul><li><a href="#changelog">Changelog</a></li><li><a href="#faq">FAQ</a></li><li><a href="https://github.com/YOUR_USERNAME/sf-release-tracker" target="_blank">GitHub</a></li><li><a href="https://github.com/YOUR_USERNAME/sf-release-tracker/issues" target="_blank">Issues</a></li></ul></div>
+    <div class="ft-col"><h5>Connect</h5><ul><li><a href="https://chromewebstore.google.com" target="_blank">Chrome Web Store</a></li><li><a href="mailto:developer.rahuljoshi@gmail.com">Contact</a></li></ul></div>
+  </div>
+  <hr class="ft-div"/>
+  <div class="ft-bot">
+    <span>© 2026 Rahul Joshi · SF Release Tracker v1.0 Beta</span>
+    <span>Made with ❤️ for Salesforce developers · <a href="#" style="color:var(--blue)">Privacy Policy</a></span>
+  </div>
+</footer>
+
+<script>
+  let lastY = 0;
+  window.addEventListener('scroll', () => {
+    const nav = document.getElementById('nav');
+    const y = window.scrollY;
+    nav.style.transform = (y > lastY && y > 80) ? 'translateY(-100%)' : 'translateY(0)';
+    lastY = y;
+  }, { passive: true });
+</script>
+</body>
+</html>
